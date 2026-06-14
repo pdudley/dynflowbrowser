@@ -201,6 +201,9 @@ class OutputSQLite:
 
         # Compound indexes for better JOIN performance
         self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_actions_uuid_id "
+            "ON dynflow_actions(execution_plan_uuid, id)")
+        self.execute(
             "CREATE INDEX IF NOT EXISTS idx_steps_plan_action "
             "ON dynflow_steps(execution_plan_uuid, action_id)")
 
@@ -305,6 +308,107 @@ class OutputSQLite:
             speed = round(last_index/seconds)
         else:
             speed = 0
+
+        return {
+            'dtype': dtype,
+            'rows': last_index,
+            'seconds': seconds,
+            'speed': speed
+        }
+
+    def write_threaded(self, dtype, csv, progress_callback=None):
+        """Write CSV data to SQLite using a thread-local connection.
+
+        Same as write() but creates its own connection for thread safety.
+        Each thread gets an independent SQLite connection with WAL mode.
+
+        Args:
+            dtype: Type of data (tasks, plans, actions, steps)
+            csv: CSV data rows
+            progress_callback: Optional callback(current, total) for progress updates
+
+        Returns:
+            dict: Statistics about the write operation
+        """
+        conn = sqlite3.connect(self.conf.dbfile)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=OFF")
+        conn.execute("PRAGMA cache_size=-64000")
+        conn.execute("PRAGMA temp_store=MEMORY")
+
+        datefields = self.conf.dynflowdata[dtype]['dates']
+        jsonfields = self.conf.dynflowdata[dtype]['json']
+        headers = self.conf.dynflowdata[dtype]['headers']
+        multi = []
+        start_time = time.time()
+        myid = False
+        batch_size = 5000
+        progress_update_freq = 100
+        last_index = 0
+        total_entries = len(csv)
+
+        placeholders = {
+            'tasks': 14, 'plans': 15, 'actions': 11, 'steps': 16
+        }
+        table_names = {
+            'tasks': 'foreman_tasks_tasks',
+            'plans': 'dynflow_execution_plans',
+            'actions': 'dynflow_actions',
+            'steps': 'dynflow_steps'
+        }
+        n = placeholders[dtype]
+        table = table_names[dtype]
+        insert_query = f"INSERT INTO {table} VALUES ({','.join('?' * n)})"
+
+        for i, lcsv in enumerate(csv):
+            last_index = i
+            if dtype == "tasks":
+                myid = lcsv[headers.index('external_id')]
+            elif dtype == "plans":
+                myid = lcsv[headers.index('uuid')]
+            elif dtype in ["actions", "steps"]:
+                myid = lcsv[headers.index('execution_plan_uuid')]
+
+            if myid in self.conf.dynflowdata['includedUUID']:
+                fields = []
+                for h, header in enumerate(headers):
+                    if header in jsonfields:
+                        if lcsv[h] == "":
+                            fields.append("")
+                        elif lcsv[h].startswith("\\x"):
+                            btext = bytes.fromhex(lcsv[h][2:])
+                            fields.append(btext.decode('Latin1'))
+                        else:
+                            value = str(lcsv[h])
+                            if header == "output":
+                                value = self.parse_action_output(value)
+                            fields.append(value)
+                    elif headers[h] in datefields:
+                        fields.append(self.util.change_timezone(
+                            self.conf.sos['timezone'], lcsv[h]))
+                    else:
+                        fields.append(lcsv[h])
+                multi.append(fields)
+
+                if len(multi) >= batch_size:
+                    conn.executemany(insert_query, multi)
+                    conn.commit()
+                    multi = []
+
+                if progress_callback and i % progress_update_freq == 0:
+                    progress_callback(i, total_entries)
+
+        if len(multi) > 0:
+            conn.executemany(insert_query, multi)
+            conn.commit()
+
+        if progress_callback:
+            progress_callback(total_entries, total_entries)
+
+        conn.close()
+
+        seconds = time.time() - start_time
+        speed = round(last_index / seconds) if last_index > 0 and seconds > 0 else 0
 
         return {
             'dtype': dtype,

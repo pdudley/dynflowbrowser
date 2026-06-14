@@ -1682,38 +1682,51 @@ class DynflowTUI(App):
         )
 
     def _import_data_worker(self) -> None:
-        """Import CSV data into SQLite with progress updates (runs in worker thread)."""
+        """Import CSV data into SQLite with progress updates (runs in worker thread).
+
+        Uses ThreadPoolExecutor to read and write all 4 table types in parallel.
+        Each thread gets its own SQLite connection via write_threaded().
+        """
         import time
+        from concurrent.futures import ThreadPoolExecutor
         from dynflowbrowser.lib.outputsqlite import OutputSQLite
 
         stats = {}
 
         try:
-            # Create error callback to show modal on errors
             def error_callback(msg):
                 self.call_from_thread(self._show_error_modal, msg)
 
-            # Create SQLite connection in this worker thread
             sqlite_worker = OutputSQLite(self.conf, error_callback)
 
-            # Import each data type with progress
-            for dtype in ['tasks', 'plans', 'actions', 'steps']:
-                self.call_from_thread(
-                    self._update_loading_status,
-                    f"Reading {dtype}..."
-                )
+            self.call_from_thread(
+                self._update_loading_status,
+                "Importing data (parallel)..."
+            )
+
+            def _import_table(dtype):
                 dynflow = self.input_dynflow.read_dynflow(dtype)
 
-                def progress_callback(current, total):
+                def progress_callback(current, total, _dtype=dtype):
                     self.call_from_thread(
                         self._update_loading_progress,
-                        dtype, current, total
+                        _dtype, current, total
                     )
 
-                result = sqlite_worker.write(dtype, dynflow, progress_callback)
-                stats[dtype] = result
+                return sqlite_worker.write_threaded(
+                    dtype, dynflow, progress_callback
+                )
 
-            # Create indexes
+            workers = getattr(self.conf.args, 'workers', 4)
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    dtype: pool.submit(_import_table, dtype)
+                    for dtype in ['tasks', 'plans', 'actions', 'steps']
+                }
+                for dtype, future in futures.items():
+                    stats[dtype] = future.result()
+
+            # Create indexes (sequential, single connection)
             self.call_from_thread(
                 self._update_loading_status,
                 "Creating database indexes..."
@@ -1728,27 +1741,21 @@ class DynflowTUI(App):
                 "indexes", 100, 100
             )
 
-            # Close worker connection
             sqlite_worker.close()
 
-            # Small delay to show completion
             time.sleep(0.5)
 
-            # Store stats and switch to welcome screen
             self.import_stats = stats
             self.call_from_thread(self._switch_to_welcome)
 
         except Exception as e:
             import traceback
             error_msg = f"Import Error:\n{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
-            # Show error in modal
             self.call_from_thread(self._show_error_modal, error_msg)
-            # Update loading screen status
             self.call_from_thread(
                 self._update_loading_status,
                 "[bold red]Import failed - see error modal[/bold red]"
             )
-            # Keep the worker thread alive so the modal stays visible
             time.sleep(3600)
 
     def _switch_to_welcome(self) -> None:

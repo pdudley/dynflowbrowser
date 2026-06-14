@@ -110,6 +110,14 @@ Examples:
             default=False
             )
         self.parser.add_argument(
+            '-w',
+            '--workers',
+            help="Number of worker threads for parallel CSV import. "
+                 "Default is min(4, CPU count).",
+            default=min(4, os.cpu_count() or 1),
+            type=int
+            )
+        self.parser.add_argument(
             '-o',
             '--output_path',
             help="Write output to this path. Default is './dynflowbrowser/'.",
