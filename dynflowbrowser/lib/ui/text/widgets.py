@@ -589,7 +589,7 @@ class TasksDataTable(DataTable):
 
     def expand_task(self) -> None:
         """Expand current parent task to show children."""
-        if self.cursor_row is None or self.cursor_row >= len(self.row_keys):
+        if self.cursor_row is None or self.cursor_row < 0 or self.cursor_row >= len(self.row_keys):
             return
 
         row_key = self.row_keys[self.cursor_row]
@@ -619,7 +619,7 @@ class TasksDataTable(DataTable):
 
     def collapse_task(self) -> None:
         """Collapse current parent task to hide children."""
-        if self.cursor_row is None or self.cursor_row >= len(self.row_keys):
+        if self.cursor_row is None or self.cursor_row < 0 or self.cursor_row >= len(self.row_keys):
             return
 
         row_key = self.row_keys[self.cursor_row]
@@ -1370,7 +1370,7 @@ class ActionsTreeTable(DataTable):
         Args:
             event: Row highlighted event
         """
-        if self.cursor_row is None or self.cursor_row >= len(self.row_keys):
+        if self.cursor_row is None or self.cursor_row < 0 or self.cursor_row >= len(self.row_keys):
             # No row selected
             if hasattr(self.screen, 'update_bindings'):
                 self.screen.update_bindings(None)
@@ -1385,7 +1385,7 @@ class ActionsTreeTable(DataTable):
 
     def expand_action(self) -> None:
         """Expand current action to show steps and child actions."""
-        if self.cursor_row is None or self.cursor_row >= len(self.row_keys):
+        if self.cursor_row is None or self.cursor_row < 0 or self.cursor_row >= len(self.row_keys):
             return
 
         row_key = self.row_keys[self.cursor_row]
@@ -1419,7 +1419,7 @@ class ActionsTreeTable(DataTable):
 
     def collapse_action(self) -> None:
         """Collapse current action to hide steps and child actions."""
-        if self.cursor_row is None or self.cursor_row >= len(self.row_keys):
+        if self.cursor_row is None or self.cursor_row < 0 or self.cursor_row >= len(self.row_keys):
             return
 
         row_key = self.row_keys[self.cursor_row]
@@ -1457,7 +1457,7 @@ class ActionsTreeTable(DataTable):
         Args:
             detail_type: Type of detail to show (input/output/data/error)
         """
-        if self.cursor_row is None or self.cursor_row >= len(self.row_keys):
+        if self.cursor_row is None or self.cursor_row < 0 or self.cursor_row >= len(self.row_keys):
             return
 
         row_key = self.row_keys[self.cursor_row]
