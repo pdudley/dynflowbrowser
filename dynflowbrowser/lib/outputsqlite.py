@@ -330,7 +330,7 @@ class OutputSQLite:
         Returns:
             dict: Statistics about the write operation
         """
-        conn = sqlite3.connect(self.conf.dbfile)
+        conn = sqlite3.connect(self.conf.dbfile, timeout=120)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=OFF")
         conn.execute("PRAGMA cache_size=-64000")

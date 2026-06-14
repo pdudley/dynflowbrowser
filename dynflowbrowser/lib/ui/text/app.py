@@ -1698,6 +1698,8 @@ class DynflowTUI(App):
                 self.call_from_thread(self._show_error_modal, msg)
 
             sqlite_worker = OutputSQLite(self.conf, error_callback)
+            # Close main connection before spawning threads to avoid lock contention
+            sqlite_worker.close(commit=True)
 
             self.call_from_thread(
                 self._update_loading_status,
@@ -1726,7 +1728,9 @@ class DynflowTUI(App):
                 for dtype, future in futures.items():
                     stats[dtype] = future.result()
 
-            # Create indexes (sequential, single connection)
+            # Reopen connection for index creation
+            sqlite_worker = OutputSQLite(self.conf, error_callback)
+
             self.call_from_thread(
                 self._update_loading_status,
                 "Creating database indexes..."
