@@ -127,7 +127,7 @@ class TasksScreen(Screen):
         table = self.query_one(TasksDataTable)
 
         # Get the row key for the current cursor position
-        if table.cursor_row is None or table.cursor_row >= len(table.row_keys):
+        if table.cursor_row is None or table.cursor_row < 0 or table.cursor_row >= len(table.row_keys):
             return
 
         row_key = table.row_keys[table.cursor_row]
@@ -232,7 +232,7 @@ class ActionsScreen(Screen):
         table = self.query_one("#actions_tree")
 
         # Get current row info
-        if table.cursor_row is None or table.cursor_row >= len(table.row_keys):
+        if table.cursor_row is None or table.cursor_row < 0 or table.cursor_row >= len(table.row_keys):
             return
 
         row_key = table.row_keys[table.cursor_row]
@@ -291,7 +291,7 @@ class ActionsScreen(Screen):
 
         # Enter expands/collapses nodes
         if event.key == "enter":
-            if table.cursor_row is None or table.cursor_row >= len(table.row_keys):
+            if table.cursor_row is None or table.cursor_row < 0 or table.cursor_row >= len(table.row_keys):
                 return
 
             row_key = table.row_keys[table.cursor_row]
